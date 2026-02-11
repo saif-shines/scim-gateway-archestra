@@ -12,6 +12,10 @@ The sync service expects these environment variables:
 - `SCALEKIT_WEBHOOK_SECRET`
 - `ARCHESTRA_APIKEY`
 - `ARCHESTRA_API_BASE_URL` (optional, defaults to `http://localhost:9000`)
+- `ARCHESTRA_APP_BASE_URL` (optional, defaults to `http://localhost:3000`)
+- `ARCHESTRA_SESSION_TOKEN` (optional, used for hackathon invite flow)
+- `ARCHESTRA_INVITE_COOKIE_HEADER` (optional override for full Cookie header)
+- `ARCHESTRA_INVITE_DEFAULT_ROLE` (optional, defaults to `editor`)
 - `ORGANIZATION_ID` (used by `/scim-gateway` page rendering)
 
 ## Webhook Sync Behavior
