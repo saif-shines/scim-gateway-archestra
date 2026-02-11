@@ -93,17 +93,6 @@ export async function processUserDeletedEvent(
       organizationId: orgLink.archestraOrganizationId,
       memberIdOrEmail: user.email,
     });
-    if (removeResult.status === "removed") {
-      console.log(
-        `[remove-member] ${user.email}: member removed from organization successfully.`,
-      );
-    } else {
-      console.log(
-        `[remove-member] ${user.email}: ${
-          removeResult.message || "Member already removed or not found in organization."
-        }`,
-      );
-    }
     recordSyncStatus(store, {
       organizationId: user.organizationId,
       lookupKey: user.email,
@@ -115,7 +104,6 @@ export async function processUserDeletedEvent(
       eventId: event.id,
       organizationId: user.organizationId,
       organizationMemberRemovalStatus: removeResult.status,
-      organizationMemberRemovalMessage: removeResult.message,
     });
   } catch (error) {
     recordSyncStatus(store, {

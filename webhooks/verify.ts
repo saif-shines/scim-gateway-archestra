@@ -32,9 +32,6 @@ export async function verifyScalekitWebhookPayload(
   const signatureHeaders = allHeaders.filter(([key]) =>
     key.toLowerCase().includes("signature") || key.toLowerCase().includes("scalekit")
   );
-  console.log("[verifyScalekitWebhookPayload] Signature-related headers:", signatureHeaders);
-  console.log("[verifyScalekitWebhookPayload] Payload type:", typeof payload);
-  console.log("[verifyScalekitWebhookPayload] Payload length:", typeof payload === "string" ? payload.length : "N/A");
 
   try {
     await (scalekit as unknown as {
@@ -46,8 +43,6 @@ export async function verifyScalekitWebhookPayload(
     }).verifyWebhookPayload(secret, headersObj, payload);
   } catch (error) {
     // Log the actual error for debugging
-    console.error("[verifyScalekitWebhookPayload] Verification failed:", error);
-    console.error("[verifyScalekitWebhookPayload] All headers:", allHeaders);
-    throw new WebhookVerificationError("Invalid signature");
+    throw new WebhookVerificationError("Invalid signature", error);
   }
 }
