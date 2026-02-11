@@ -13,4 +13,6 @@ console.log(add(12, 12));
 
 app.get('/', (c: Context) => c.text('Hono!'))
 
+app.post('/webhook', (c: Context) => c.text('Hono!'))
+
 Deno.serve(app.fetch);
