@@ -44,12 +44,19 @@ function isMemberNotFound(message: string): boolean {
     (normalized.includes("not found") && normalized.includes("member"));
 }
 
-async function updateOrganizationMemberRole(input: {
-  organizationId: string;
-  memberIdentifier: string;
-  role: string;
-}): Promise<{ status: "updated" | "already_set" | "not_found"; message?: string }> {
-  const appBaseUrl = Deno.env.get("ARCHESTRA_APP_BASE_URL")?.trim() || "http://localhost:3000";
+interface OrganizationMemberItem {
+  id?: string;
+  user?: {
+    email?: string;
+  };
+}
+
+interface FullOrganizationResponse {
+  id?: string;
+  members?: OrganizationMemberItem[];
+}
+
+function getSessionCookieHeader(): string {
   const sessionToken = Deno.env.get("ARCHESTRA_SESSION_TOKEN")?.trim();
   const cookieHeader = Deno.env.get("ARCHESTRA_INVITE_COOKIE_HEADER")?.trim() ||
     (sessionToken ? `archestra.session_token=${sessionToken}` : "");
@@ -58,6 +65,49 @@ async function updateOrganizationMemberRole(input: {
       "Missing role update auth cookie. Set ARCHESTRA_SESSION_TOKEN or ARCHESTRA_INVITE_COOKIE_HEADER.",
     );
   }
+  return cookieHeader;
+}
+
+async function resolveOrganizationMemberId(input: {
+  appBaseUrl: string;
+  organizationId: string;
+  email: string;
+}): Promise<string | undefined> {
+  const response = await fetch(`${input.appBaseUrl}/api/auth/organization/get-full-organization`, {
+    method: "GET",
+    headers: {
+      Cookie: getSessionCookieHeader(),
+      Origin: input.appBaseUrl,
+      Referer: `${input.appBaseUrl}/settings/members`,
+    },
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `Get full organization API ${response.status} /get-full-organization failed: ${text}`,
+    );
+  }
+  const body = (await response.json()) as FullOrganizationResponse;
+  if (body.id && body.id !== input.organizationId) {
+    throw new Error(
+      `Session organization mismatch. Expected ${input.organizationId} but got ${body.id}.`,
+    );
+  }
+  const targetEmail = input.email.trim().toLowerCase();
+  const members = Array.isArray(body.members) ? body.members : [];
+  const matchedMember = members.find((member) =>
+    Boolean(member.id) && member.user?.email?.trim().toLowerCase() === targetEmail
+  );
+  return matchedMember?.id;
+}
+
+async function updateOrganizationMemberRole(input: {
+  organizationId: string;
+  memberId: string;
+  role: string;
+}): Promise<{ status: "updated" | "already_set" | "not_found"; message?: string }> {
+  const appBaseUrl = Deno.env.get("ARCHESTRA_APP_BASE_URL")?.trim() || "http://localhost:3000";
+  const cookieHeader = getSessionCookieHeader();
 
   const endpoint = `${appBaseUrl}/api/auth/organization/update-member-role`;
   const response = await fetch(endpoint, {
@@ -69,7 +119,7 @@ async function updateOrganizationMemberRole(input: {
       Referer: `${appBaseUrl}/settings/members`,
     },
     body: JSON.stringify({
-      memberId: input.memberIdentifier,
+      memberId: input.memberId,
       role: input.role,
       organizationId: input.organizationId,
     }),
@@ -143,20 +193,24 @@ export async function processUserUpdatedEvent(
     let roleUpdateStatus: "updated" | "already_set" | "skipped" | "not_found" = "skipped";
     let roleUpdateMessage: string | undefined = undefined;
     if (organizationRole) {
-      let roleUpdateResult = await updateOrganizationMemberRole({
+      const appBaseUrl = Deno.env.get("ARCHESTRA_APP_BASE_URL")?.trim() || "http://localhost:3000";
+      const organizationMemberId = await resolveOrganizationMemberId({
+        appBaseUrl,
         organizationId: orgLink.archestraOrganizationId,
-        memberIdentifier: updated.id,
-        role: organizationRole,
+        email: user.email,
       });
-      if (roleUpdateResult.status === "not_found") {
-        roleUpdateResult = await updateOrganizationMemberRole({
+      if (!organizationMemberId) {
+        roleUpdateStatus = "not_found";
+        roleUpdateMessage = `No organization member found for email ${user.email}.`;
+      } else {
+        const roleUpdateResult = await updateOrganizationMemberRole({
           organizationId: orgLink.archestraOrganizationId,
-          memberIdentifier: user.email,
+          memberId: organizationMemberId,
           role: organizationRole,
         });
+        roleUpdateStatus = roleUpdateResult.status;
+        roleUpdateMessage = roleUpdateResult.message;
       }
-      roleUpdateStatus = roleUpdateResult.status;
-      roleUpdateMessage = roleUpdateResult.message;
     } else {
       roleUpdateMessage = "No supported role found in dp_roles[0].value; skipped role update.";
     }
