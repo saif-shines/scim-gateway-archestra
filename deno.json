@@ -1,6 +1,10 @@
 {
   "tasks": {
-    "dev": "deno run --watch --allow-net --allow-env --allow-read main.ts"
+    "dev": "deno run --watch --allow-net --allow-env --allow-read main.ts",
+    "test": "deno test --allow-net --allow-env --allow-read",
+    "test:unit": "deno test --allow-net --allow-env --allow-read tests/unit",
+    "test:contract": "deno test --allow-net --allow-env --allow-read tests/contract",
+    "test:integration": "deno test --allow-net --allow-env --allow-read tests/integration"
   },
   "imports": {
     "@hono/hono": "jsr:@hono/hono@^4.11.9",
