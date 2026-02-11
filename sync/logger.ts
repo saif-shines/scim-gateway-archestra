@@ -4,6 +4,4 @@ export function logSync(level: "info" | "error", event: string, data: Record<str
     console.error(`[sync] ${payload}`);
     return;
   }
-  console.log(`[sync] ${payload}`);
 }
-
