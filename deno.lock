@@ -3,6 +3,7 @@
   "specifiers": {
     "jsr:@hono/hono@^4.11.9": "4.11.9",
     "jsr:@std/assert@1": "1.0.18",
+    "jsr:@std/dotenv@0.224": "0.224.2",
     "jsr:@std/internal@^1.0.12": "1.0.12",
     "npm:@scalekit-sdk/node@latest": "2.2.0_@bufbuild+protobuf@2.11.0_@connectrpc+connect@2.1.1__@bufbuild+protobuf@2.11.0"
   },
@@ -15,6 +16,9 @@
       "dependencies": [
         "jsr:@std/internal"
       ]
+    },
+    "@std/dotenv@0.224.2": {
+      "integrity": "29081695357e4534696c9e986b2560be29c141ccf52daa32b6c20ff5b5c64ab9"
     },
     "@std/internal@1.0.12": {
       "integrity": "972a634fd5bc34b242024402972cd5143eac68d8dffaca5eaa4dba30ce17b027"
@@ -235,6 +239,7 @@
     "dependencies": [
       "jsr:@hono/hono@^4.11.9",
       "jsr:@std/assert@1",
+      "jsr:@std/dotenv@0.224",
       "npm:@scalekit-sdk/node@latest"
     ]
   }
