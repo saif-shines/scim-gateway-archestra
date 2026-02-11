@@ -9,7 +9,7 @@ export function renderScimGatewayPage(src: string): string {
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>SCIM Gateway Admin Portal</title>
+    <title>SCIM Gateway for Archestra AI</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
       body {
@@ -50,8 +50,8 @@ export function renderScimGatewayPage(src: string): string {
   </head>
   <body>
     <div class="container">
-      <h1>SCIM Gateway Admin Portal</h1>
-      <p>Embedded Scalekit admin portal for configuring SCIM provisioning.</p>
+      <h1>SCIM Gateway for Archestra AI</h1>
+      <p>Automate provisioning access to Archestra dashboard and its services.</p>
       <div class="frame-wrapper">
         <iframe
           src="${src}"
