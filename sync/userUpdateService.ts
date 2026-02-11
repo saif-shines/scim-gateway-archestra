@@ -6,6 +6,10 @@ import { resolveMappedTeam } from "./teamMapping.ts";
 import { InMemorySyncStore } from "./store.ts";
 import { toNormalizedUserUpdatePayload } from "./userUpdateTransform.ts";
 
+function normalizeMemberRole(role?: string): string {
+  return role?.trim() ? role.trim().toLowerCase() : "member";
+}
+
 export async function processUserUpdatedEvent(
   store: InMemorySyncStore,
   archestraClient: ArchestraClient,
@@ -16,6 +20,7 @@ export async function processUserUpdatedEvent(
     const updated = await archestraClient.updateUser({
       externalId: user.scalekitUserId,
       email: user.email,
+      preferredUsername: user.preferredUsername,
       givenName: user.givenName,
       familyName: user.familyName,
       fullName: user.fullName,
@@ -26,7 +31,11 @@ export async function processUserUpdatedEvent(
       department: user.department,
       roleFallback: user.roleFallback,
     });
-    await archestraClient.addTeamMember(team.archestraTeamId, updated.id);
+    await archestraClient.addTeamMember(
+      team.archestraTeamId,
+      updated.id,
+      normalizeMemberRole(user.roleFallback),
+    );
     recordSyncStatus(store, {
       organizationId: user.organizationId,
       lookupKey: user.email,
@@ -57,4 +66,3 @@ export async function processUserUpdatedEvent(
     throw error;
   }
 }
-

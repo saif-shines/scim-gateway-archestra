@@ -9,9 +9,25 @@ interface ArchestraTeamResponse {
   name: string;
 }
 
+interface ArchestraUserListItem {
+  id: string;
+  name: string;
+}
+
+interface ArchestraRoleItem {
+  id?: string;
+  name?: string;
+}
+
+interface ArchestraTeamMemberItem {
+  userId?: string;
+  role?: string;
+}
+
 export interface ArchestraUserInput {
   externalId: string;
   email: string;
+  preferredUsername?: string;
   givenName?: string;
   familyName?: string;
   fullName?: string;
@@ -22,7 +38,7 @@ export interface ArchestraClient {
   getOrganization(): Promise<{ id: string; name?: string }>;
   listTeams(): Promise<Array<{ id: string; name: string }>>;
   createTeam(name: string): Promise<{ id: string; name: string }>;
-  addTeamMember(teamId: string, userId: string): Promise<void>;
+  addTeamMember(teamId: string, userId: string, role?: string): Promise<void>;
   removeTeamMember(teamId: string, userId: string): Promise<void>;
   upsertUser(input: ArchestraUserInput): Promise<{ id: string; email: string }>;
   updateUser(input: ArchestraUserInput): Promise<{ id: string; email: string }>;
@@ -33,16 +49,10 @@ export class HttpArchestraClient implements ArchestraClient {
   private readonly apiKey: string;
 
   constructor(baseUrl?: string, apiKey?: string) {
-    // #region agent log
     const envApiKey = Deno.env.get("ARCHESTRA_APIKEY");
     const envBaseUrl = Deno.env.get("ARCHESTRA_API_BASE_URL");
-    fetch('http://127.0.0.1:7244/ingest/3bfa3330-f668-485b-b926-ca8fb6e248c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'archestra/client.ts:35',message:'Constructor: env vars check',data:{envApiKeyPresent:!!envApiKey,envApiKeyLength:envApiKey?.length??0,envApiKeyFirst3:envApiKey?.substring(0,3)??'N/A',envApiKeyLast3:envApiKey?.substring(Math.max(0,(envApiKey?.length??0)-3))??'N/A',envApiKeyHasWhitespace:envApiKey?/[\s\n\r]/.test(envApiKey):false,envBaseUrl:envBaseUrl??'N/A',paramApiKey:!!apiKey,paramBaseUrl:baseUrl??'N/A'},timestamp:Date.now(),runId:'debug1',hypothesisId:'A,B,C,D'})}).catch(()=>{});
-    // #endregion
     this.baseUrl = baseUrl ?? envBaseUrl ?? "http://localhost:9000";
     this.apiKey = apiKey ?? envApiKey ?? "";
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/3bfa3330-f668-485b-b926-ca8fb6e248c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'archestra/client.ts:40',message:'Constructor: final values',data:{finalApiKeyPresent:!!this.apiKey,finalApiKeyLength:this.apiKey?.length??0,finalApiKeyFirst3:this.apiKey?.substring(0,3)??'N/A',finalApiKeyLast3:this.apiKey?.substring(Math.max(0,(this.apiKey?.length??0)-3))??'N/A',finalApiKeyHasWhitespace:this.apiKey?/[\s\n\r]/.test(this.apiKey):false,finalBaseUrl:this.baseUrl},timestamp:Date.now(),runId:'debug1',hypothesisId:'A,B,C,D'})}).catch(()=>{});
-    // #endregion
     if (!this.apiKey) {
       throw new Error("ARCHESTRA_APIKEY is required");
     }
@@ -86,55 +96,113 @@ export class HttpArchestraClient implements ArchestraClient {
     return { id: data.id, name: data.name ?? name };
   }
 
-  async addTeamMember(teamId: string, userId: string): Promise<void> {
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/3bfa3330-f668-485b-b926-ca8fb6e248c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'archestra/client.ts:addTeamMember',message:'Team membership request payload',data:{teamId,userId,userIdLooksSynthetic:userId.startsWith('usr_')},timestamp:Date.now(),runId:'debug2',hypothesisId:'G'})}).catch(()=>{});
-    // #endregion
-    if (userId.startsWith("usr_")) {
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/3bfa3330-f668-485b-b926-ca8fb6e248c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'archestra/client.ts:addTeamMember',message:'Skipped team membership mutation for synthetic user id',data:{teamId,userId},timestamp:Date.now(),runId:'post-fix-3',hypothesisId:'L'})}).catch(()=>{});
-      // #endregion
-      return;
+  async addTeamMember(teamId: string, userId: string, role = "member"): Promise<void> {
+    const userIdLooksUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      .test(userId);
+    let availableRoleCount: number | null = null;
+    let requestedRoleExists: boolean | null = null;
+    try {
+      const roles = await this.request<ArchestraRoleItem[] | { items?: ArchestraRoleItem[] }>(
+        "/api/roles",
+        { method: "GET" },
+      );
+      const roleItems = Array.isArray(roles) ? roles : (roles.items ?? []);
+      const requested = role.trim().toLowerCase();
+      availableRoleCount = roleItems.length;
+      requestedRoleExists = roleItems.some((r) => (r.name ?? "").trim().toLowerCase() === requested);
+    } catch {
+      // best-effort debug only
     }
+    // #region agent log
+    fetch("http://127.0.0.1:7244/ingest/3bfa3330-f668-485b-b926-ca8fb6e248c0", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ location: "archestra/client.ts:addTeamMember", message: "Preparing team membership mutation", data: { teamId, userIdPrefix: userId.slice(0, 16), userIdLength: userId.length, userIdLooksUuid, role, availableRoleCount, requestedRoleExists }, timestamp: Date.now(), runId: "debug-membership", hypothesisId: "H1,H2,H8" }) }).catch(() => {});
+    // #endregion
     await this.request(`/api/teams/${teamId}/members`, {
       method: "POST",
-      body: JSON.stringify({ userId }),
+      body: JSON.stringify({ userId, role }),
     });
   }
 
   async removeTeamMember(teamId: string, userId: string): Promise<void> {
-    if (userId.startsWith("usr_")) {
-      // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/3bfa3330-f668-485b-b926-ca8fb6e248c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'archestra/client.ts:removeTeamMember',message:'Skipped team membership deletion for synthetic user id',data:{teamId,userId},timestamp:Date.now(),runId:'post-fix-3',hypothesisId:'L'})}).catch(()=>{});
-      // #endregion
-      return;
-    }
     await this.request(`/api/teams/${teamId}/members/${userId}`, {
       method: "DELETE",
     });
   }
 
-  // Archestra user endpoints are not fully defined in this repository.
-  // Use deterministic external-id based IDs so workflow can proceed and tests can validate behavior.
-  upsertUser(input: ArchestraUserInput): Promise<{ id: string; email: string }> {
-    const stableId = this.externalIdToUserId(input.externalId || input.email);
+  async upsertUser(input: ArchestraUserInput): Promise<{ id: string; email: string }> {
+    const externalIdLooksUuid = this.looksLikeUuid(input.externalId);
     // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/3bfa3330-f668-485b-b926-ca8fb6e248c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'archestra/client.ts:upsertUser',message:'Using local synthetic user id instead of API-backed user',data:{email:input.email,externalId:input.externalId,stableId},timestamp:Date.now(),runId:'debug2',hypothesisId:'H'})}).catch(()=>{});
+    fetch("http://127.0.0.1:7244/ingest/3bfa3330-f668-485b-b926-ca8fb6e248c0", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ location: "archestra/client.ts:upsertUser", message: "User id source selected for create flow", data: { source: "externalId", externalIdPrefix: input.externalId.slice(0, 16), externalIdLength: input.externalId.length, externalIdLooksUuid }, timestamp: Date.now(), runId: "debug-membership", hypothesisId: "H1" }) }).catch(() => {});
     // #endregion
-    return Promise.resolve({ id: stableId, email: input.email });
+    // Archestra membership endpoints require Archestra internal user IDs.
+    // If external_id is not in that format, resolve by identity labels from Archestra.
+    if (externalIdLooksUuid) {
+      return { id: input.externalId, email: input.email };
+    }
+    const resolvedId = await this.resolveExistingArchestraUserId(input);
+    return { id: resolvedId, email: input.email };
   }
 
-  updateUser(input: ArchestraUserInput): Promise<{ id: string; email: string }> {
-    const stableId = this.externalIdToUserId(input.externalId || input.email);
+  async updateUser(input: ArchestraUserInput): Promise<{ id: string; email: string }> {
+    const externalIdLooksUuid = this.looksLikeUuid(input.externalId);
     // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/3bfa3330-f668-485b-b926-ca8fb6e248c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'archestra/client.ts:updateUser',message:'Using local synthetic user id instead of API-backed user',data:{email:input.email,externalId:input.externalId,stableId,active:input.active??null},timestamp:Date.now(),runId:'debug2',hypothesisId:'H'})}).catch(()=>{});
+    fetch("http://127.0.0.1:7244/ingest/3bfa3330-f668-485b-b926-ca8fb6e248c0", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ location: "archestra/client.ts:updateUser", message: "User id source selected for update flow", data: { source: "externalId", externalIdPrefix: input.externalId.slice(0, 16), externalIdLength: input.externalId.length, externalIdLooksUuid, active: input.active ?? null }, timestamp: Date.now(), runId: "debug-membership", hypothesisId: "H1" }) }).catch(() => {});
     // #endregion
-    return Promise.resolve({ id: stableId, email: input.email });
+    if (externalIdLooksUuid) {
+      return { id: input.externalId, email: input.email };
+    }
+    const resolvedId = await this.resolveExistingArchestraUserId(input);
+    return { id: resolvedId, email: input.email };
   }
 
+  private looksLikeUuid(value: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      .test(value);
+  }
 
-  private externalIdToUserId(externalId: string): string {
-    return `usr_${externalId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24)}`;
+  private async resolveExistingArchestraUserId(input: ArchestraUserInput): Promise<string> {
+    const users = await this.request<ArchestraUserListItem[]>("/api/interactions/user-ids", {
+      method: "GET",
+    });
+    const normalize = (value: string) => value.trim().toLowerCase();
+    const localPart = input.email.includes("@") ? normalize(input.email.split("@")[0]) : "";
+    const candidates = [
+      input.fullName,
+      input.preferredUsername,
+      input.email,
+    ]
+      .filter((value): value is string => Boolean(value?.trim()))
+      .map(normalize);
+    const candidateSet = new Set(candidates);
+    const exact = users.find((user) => candidateSet.has(normalize(user.name)));
+    const userNameWithAtCount = users.filter((user) => normalize(user.name).includes("@")).length;
+    const userNameWithSpaceCount = users.filter((user) => normalize(user.name).includes(" ")).length;
+    const userNameEqualsLocalPartCount = localPart
+      ? users.filter((user) => normalize(user.name) === localPart).length
+      : 0;
+    const userIdLooksUuidCount = users.filter((user) => this.looksLikeUuid(user.id)).length;
+
+    // #region agent log
+    fetch("http://127.0.0.1:7244/ingest/3bfa3330-f668-485b-b926-ca8fb6e248c0", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ location: "archestra/client.ts:resolveExistingArchestraUserId", message: "Resolved Archestra user id from user list", data: { userListCount: users.length, candidateCount: candidates.length, matched: Boolean(exact), matchedIdPrefix: exact?.id.slice(0, 12) ?? null, userIdLooksUuidCount, userNameWithAtCount, userNameWithSpaceCount, userNameEqualsLocalPartCount }, timestamp: Date.now(), runId: "post-fix", hypothesisId: "H5,H6,H7" }) }).catch(() => {});
+    // #endregion
+
+    if (exact) {
+      return exact.id;
+    }
+
+    // In some Archestra deployments, /api/interactions/user-ids is already scoped
+    // to a single effective user and does not expose email/full-name labels.
+    // Use the only available user id as a deterministic fallback.
+    if (users.length === 1 && users[0].id) {
+      // #region agent log
+      fetch("http://127.0.0.1:7244/ingest/3bfa3330-f668-485b-b926-ca8fb6e248c0", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ location: "archestra/client.ts:resolveExistingArchestraUserId", message: "Fallback: single visible Archestra user id selected", data: { fallbackUserIdPrefix: users[0].id.slice(0, 12), fallbackUserIdLength: users[0].id.length, fallbackUserIdLooksUuid: this.looksLikeUuid(users[0].id) }, timestamp: Date.now(), runId: "post-fix", hypothesisId: "H10" }) }).catch(() => {});
+      // #endregion
+      return users[0].id;
+    }
+
+    throw new Error(
+      "Unable to map webhook user to Archestra internal user id. " +
+      "No match in /api/interactions/user-ids for available identity labels.",
+    );
   }
 
   private async request<T = Record<string, unknown>>(
@@ -149,24 +217,42 @@ export class HttpArchestraClient implements ArchestraClient {
       "Content-Type": "application/json",
       ...(init.headers ?? {}),
     };
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/3bfa3330-f668-485b-b926-ca8fb6e248c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'archestra/client.ts:123',message:'Request: before fetch',data:{method:init.method??'GET',url:url,baseUrl:this.baseUrl,path:path,apiKeyLength:this.apiKey?.length??0,apiKeyFirst3:this.apiKey?.substring(0,3)??'N/A',apiKeyLast3:this.apiKey?.substring(Math.max(0,(this.apiKey?.length??0)-3))??'N/A',authHeaderPrefix:authHeader.substring(0,Math.min(10,authHeader.length)),authHeaderLength:authHeader.length,allHeaderKeys:Object.keys(headers)},timestamp:Date.now(),runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
 
     const response = await fetch(url, {
       ...init,
       headers,
     });
-    // #region agent log
-    const responseHeaders: Record<string, string> = {};
-    response.headers.forEach((v, k) => { responseHeaders[k] = v; });
-    fetch('http://127.0.0.1:7244/ingest/3bfa3330-f668-485b-b926-ca8fb6e248c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'archestra/client.ts:125',message:'Request: after fetch',data:{status:response.status,statusText:response.statusText,responseHeaders:responseHeaders,ok:response.ok},timestamp:Date.now(),runId:'debug1',hypothesisId:'F'})}).catch(()=>{});
-    // #endregion
     if (!response.ok) {
       const text = await response.text();
+      let requestUserId: string | undefined;
+      let requestRole: string | undefined;
+      if (typeof init.body === "string") {
+        try {
+          const parsed = JSON.parse(init.body) as { userId?: string; role?: string };
+          requestUserId = parsed.userId;
+          requestRole = parsed.role;
+        } catch {
+          // no-op: only best-effort parse for debug context
+        }
+      }
       // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/3bfa3330-f668-485b-b926-ca8fb6e248c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'archestra/client.ts:130',message:'Request: error response',data:{status:response.status,path:path,errorText:text,errorClassHint:{hasDuplicate:/duplicate|unique/i.test(text),hasForeignKey:/foreign key|violates foreign key/i.test(text),hasNotFound:/not found|does not exist/i.test(text)}},timestamp:Date.now(),runId:'debug3',hypothesisId:'I,J'})}).catch(()=>{});
+      fetch("http://127.0.0.1:7244/ingest/3bfa3330-f668-485b-b926-ca8fb6e248c0", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ location: "archestra/client.ts:request:error", message: "Archestra request failed with classification", data: { path, status: response.status, hasForeignKeyHint: /foreign key|violates|constraint|team_member/i.test(text), requestUserIdPrefix: requestUserId?.slice(0, 16) ?? null, requestUserIdLooksUuid: requestUserId ? /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestUserId) : null, requestRole: requestRole ?? null }, timestamp: Date.now(), runId: "debug-membership", hypothesisId: "H1,H2,H3" }) }).catch(() => {});
       // #endregion
+      if (response.status >= 500 && path.includes("/members")) {
+        try {
+          const teamPath = path.split("/members")[0];
+          const members = await this.request<ArchestraTeamMemberItem[]>(
+            `${teamPath}/members`,
+            { method: "GET" },
+          );
+          const sample = members[0];
+          // #region agent log
+          fetch("http://127.0.0.1:7244/ingest/3bfa3330-f668-485b-b926-ca8fb6e248c0", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ location: "archestra/client.ts:request:error:members", message: "Existing team members sampled after membership failure", data: { teamPath, existingMemberCount: members.length, sampleUserIdPrefix: sample?.userId?.slice(0, 16) ?? null, sampleUserIdLength: sample?.userId?.length ?? null, sampleRole: sample?.role ?? null }, timestamp: Date.now(), runId: "debug-membership", hypothesisId: "H8,H9" }) }).catch(() => {});
+          // #endregion
+        } catch {
+          // best-effort debug only
+        }
+      }
       console.error(`[ArchestraClient] Request failed: ${response.status} ${path}`);
       console.error(`[ArchestraClient] Request URL: ${url}`);
       console.error(`[ArchestraClient] Response: ${text}`);
