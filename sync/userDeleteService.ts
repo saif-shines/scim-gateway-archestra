@@ -2,7 +2,6 @@ import type { ArchestraClient } from "../archestra/client.ts";
 import type { ScalekitWebhookEvent } from "../models/syncTypes.ts";
 import { recordSyncStatus } from "../status/syncStatusService.ts";
 import { InMemorySyncStore } from "./store.ts";
-import { resolveMappedTeam } from "./teamMapping.ts";
 import { toNormalizedUserDeletePayload } from "./userDeleteTransform.ts";
 import { logSync } from "./logger.ts";
 
@@ -79,23 +78,11 @@ async function removeOrganizationMemberInviteApi(input: {
 
 export async function processUserDeletedEvent(
   store: InMemorySyncStore,
-  archestraClient: ArchestraClient,
+  _archestraClient: ArchestraClient,
   event: ScalekitWebhookEvent,
 ): Promise<void> {
   const user = toNormalizedUserDeletePayload(event);
-  const stableUser = await archestraClient.updateUser({
-    externalId: user.scalekitUserId,
-    email: user.email,
-    active: false,
-    fullName: user.fullName,
-  });
   try {
-    const team = await resolveMappedTeam(store, archestraClient, {
-      organizationId: user.organizationId,
-      department: user.department,
-      roleFallback: user.roleFallback,
-    });
-    await archestraClient.removeTeamMember(team.archestraTeamId, stableUser.id);
     const orgLink = store.getOrganizationLink(user.organizationId);
     if (!orgLink?.archestraOrganizationId) {
       throw new Error(
@@ -106,7 +93,11 @@ export async function processUserDeletedEvent(
       organizationId: orgLink.archestraOrganizationId,
       memberIdOrEmail: user.email,
     });
-    if (removeResult.status === "already_missing") {
+    if (removeResult.status === "removed") {
+      console.log(
+        `[remove-member] ${user.email}: member removed from organization successfully.`,
+      );
+    } else {
       console.log(
         `[remove-member] ${user.email}: ${
           removeResult.message || "Member already removed or not found in organization."
@@ -123,8 +114,6 @@ export async function processUserDeletedEvent(
     logSync("info", "user_delete_synced", {
       eventId: event.id,
       organizationId: user.organizationId,
-      userId: stableUser.id,
-      removedTeamId: team.archestraTeamId,
       organizationMemberRemovalStatus: removeResult.status,
       organizationMemberRemovalMessage: removeResult.message,
     });
