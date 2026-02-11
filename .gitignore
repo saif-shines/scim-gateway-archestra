@@ -5,6 +5,8 @@
 .vscode/
 .idea/
 *.swp
+*.tmp
+Thumbs.db
 
 # Env files
 .env
@@ -42,3 +44,4 @@ pnpm-debug.log*
 .specify/
 .speckit/
 speckit.*
+specs/*

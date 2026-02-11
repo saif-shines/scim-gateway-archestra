@@ -1,0 +1,33 @@
+# archestra Development Guidelines
+
+Auto-generated from all feature plans. Last updated: 2026-02-11
+
+## Active Technologies
+- TypeScript on Deno 2.x + Hono, `@scalekit-sdk/node`, Deno Fetch API, Archestra REST endpoints (001-scalekit-user-sync)
+- Lightweight persistence for organization link and sync-status records (Deno KV or equivalent) (001-scalekit-user-sync)
+
+- TypeScript on Deno 2.x + Hono, `@scalekit-sdk/node`, Deno Fetch API, Archestra OpenAPI-backed REST endpoints (001-scalekit-user-sync)
+
+## Project Structure
+
+```text
+backend/
+frontend/
+tests/
+```
+
+## Commands
+
+npm test && npm run lint
+
+## Code Style
+
+TypeScript on Deno 2.x: Follow standard conventions
+
+## Recent Changes
+- 001-scalekit-user-sync: Added TypeScript on Deno 2.x + Hono, `@scalekit-sdk/node`, Deno Fetch API, Archestra REST endpoints
+
+- 001-scalekit-user-sync: Added TypeScript on Deno 2.x + Hono, `@scalekit-sdk/node`, Deno Fetch API, Archestra OpenAPI-backed REST endpoints
+
+<!-- MANUAL ADDITIONS START -->
+<!-- MANUAL ADDITIONS END -->
